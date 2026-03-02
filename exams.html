@@ -167,12 +167,38 @@ const DATA = [[["What are two responsibilities that you will have as a British c
 
 <script>
 (function() {
+  // --- LocalStorage Logic ---
+  const SAVE_KEY = 'uk_test_results';
+
   // State
   let currentExam = -1;
   let currentQ = 0;
-  let examState = []; // per-exam: { answered: [], selections: [], results: [] }
+  let examState = []; 
   let reviewMode = false;
   let wrongIndices = [];
+
+  // Load saved data from localStorage if it exists
+  const savedData = localStorage.getItem(SAVE_KEY);
+  const parsedSavedData = savedData ? JSON.parse(savedData) : null;
+
+  // Initialize exam state
+  DATA.forEach((exam, ei) => {
+    // If we have saved data for this specific exam index, use it; otherwise, start fresh
+    if (parsedSavedData && parsedSavedData[ei]) {
+      examState.push(parsedSavedData[ei]);
+    } else {
+      examState.push({
+        answered: new Array(exam.length).fill(false),
+        selections: exam.map(() => []),
+        results: new Array(exam.length).fill(null) 
+      });
+    }
+  });
+
+  // Function to save current examState to localStorage
+  function saveToLocalStorage() {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(examState));
+  }
 
   // DOM refs
   const examSelection = document.getElementById('examSelection');
@@ -190,21 +216,27 @@ const DATA = [[["What are two responsibilities that you will have as a British c
   const checkBtn = document.getElementById('checkBtn');
   const resultsBar = document.getElementById('resultsBar');
 
-  // Initialize exam state
-  DATA.forEach((exam, ei) => {
-    examState.push({
-      answered: new Array(exam.length).fill(false),
-      selections: exam.map(() => []),
-      results: new Array(exam.length).fill(null) // null = unanswered, true = correct, false = incorrect
-    });
-  });
-
   // Build exam selection grid
   DATA.forEach((exam, ei) => {
     const card = document.createElement('div');
     card.className = 'exam-card';
     card.id = 'examcard-' + ei;
-    card.innerHTML = '<h3>Exam ' + (ei + 1) + '</h3><div class="info">' + exam.length + ' questions</div><div class="score-display" id="exam-score-' + ei + '"></div>';
+    
+    // Calculate initial score display if data was loaded
+    const state = examState[ei];
+    const correct = state.results.filter(r => r === true).length;
+    const isAnswered = state.answered.some(a => a === true);
+    const total = exam.length;
+    const passed = correct >= Math.ceil(total * 0.75);
+
+    let scoreHtml = '';
+    let scoreClass = 'score-display';
+    if(isAnswered) {
+        scoreHtml = correct + '/' + total + (passed ? ' \u2705' : ' \u274c');
+        scoreClass += passed ? ' pass' : ' fail';
+    }
+
+    card.innerHTML = '<h3>Exam ' + (ei + 1) + '</h3><div class="info">' + exam.length + ' questions</div><div class="' + scoreClass + '" id="exam-score-' + ei + '">' + scoreHtml + '</div>';
     card.addEventListener('click', () => startExam(ei));
     examGrid.appendChild(card);
   });
@@ -217,7 +249,6 @@ const DATA = [[["What are two responsibilities that you will have as a British c
     window.scrollTo(0, 0);
   });
 
-  // Nav buttons - onclick handlers are set dynamically in renderQuestion()
   checkBtn.addEventListener('click', () => checkCurrentAnswer());
 
   function startExam(ei) {
@@ -278,14 +309,11 @@ const DATA = [[["What are two responsibilities that you will have as a British c
     const isMulti = q[1] === 1;
     const isAnswered = state.answered[currentQ];
 
-    // Progress
     progressText.textContent = 'Question ' + (currentQ + 1) + ' of ' + exam.length;
     progressFill.style.width = ((currentQ + 1) / exam.length * 100) + '%';
 
-    // Update number highlights
     updateQNumbers();
 
-    // Build question HTML
     let html = '';
     if (reviewMode) {
       const posInWrong = wrongIndices.indexOf(currentQ);
@@ -322,14 +350,12 @@ const DATA = [[["What are two responsibilities that you will have as a British c
 
     html += '</ul>';
 
-    // Explanation
     if (isAnswered && q[3]) {
       html += '<div class="explanation show">' + escapeHtml(q[3]) + '</div>';
     }
 
     questionCard.innerHTML = html;
 
-    // Attach click handlers to answers (only if not answered)
     if (!isAnswered) {
       questionCard.querySelectorAll('.answers li').forEach(li => {
         li.addEventListener('click', () => {
@@ -339,7 +365,6 @@ const DATA = [[["What are two responsibilities that you will have as a British c
       });
     }
 
-    // Update nav buttons
     if (reviewMode) {
       const posInWrong = wrongIndices.indexOf(currentQ);
       const isFirst = posInWrong <= 0;
@@ -391,13 +416,13 @@ const DATA = [[["What are two responsibilities that you will have as a British c
     const q = DATA[currentExam][currentQ];
     const sel = state.selections[currentQ];
 
-    // Determine correctness
     const correctIndices = q[2].map((a, i) => a[1] === 1 ? i : -1).filter(x => x >= 0);
     const isCorrect = correctIndices.length === sel.length && correctIndices.every(ci => sel.includes(ci));
 
     state.answered[currentQ] = true;
     state.results[currentQ] = isCorrect;
 
+    saveToLocalStorage(); // Save progress after every check
     renderQuestion();
   }
 
@@ -405,7 +430,6 @@ const DATA = [[["What are two responsibilities that you will have as a British c
     const state = examState[currentExam];
     const exam = DATA[currentExam];
 
-    // Auto-check any unanswered questions
     exam.forEach((q, qi) => {
       if (!state.answered[qi]) {
         const correctIndices = q[2].map((a, i) => a[1] === 1 ? i : -1).filter(x => x >= 0);
@@ -415,6 +439,8 @@ const DATA = [[["What are two responsibilities that you will have as a British c
         state.results[qi] = isCorrect;
       }
     });
+
+    saveToLocalStorage(); // Final save for the exam
 
     const correct = state.results.filter(r => r === true).length;
     const total = exam.length;
@@ -437,7 +463,6 @@ const DATA = [[["What are two responsibilities that you will have as a British c
     resultsBar.classList.add('show');
     quizNav.style.display = 'none';
 
-    // Update exam selection card score
     const scoreEl = document.getElementById('exam-score-' + currentExam);
     scoreEl.textContent = correct + '/' + total + (passed ? ' \u2705' : ' \u274c');
     scoreEl.className = 'score-display ' + (passed ? 'pass' : 'fail');
