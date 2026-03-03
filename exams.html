@@ -30,8 +30,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 
 .quiz-topbar { background: #1a237e; color: white; padding: 14px 20px; border-radius: 8px 8px 0 0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .quiz-topbar h2 { font-size: 1.15rem; }
-.quiz-topbar .back-btn { background: rgba(255,255,255,0.2); color: white; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; transition: background 0.2s; }
+.quiz-topbar .back-btn, .quiz-topbar .retake-btn { color: white; border: none; padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; transition: background 0.2s; }
+.quiz-topbar .back-btn { background: rgba(255,255,255,0.2); }
 .quiz-topbar .back-btn:hover { background: rgba(255,255,255,0.35); }
+.quiz-topbar .retake-btn { background: #f44336; margin-right: 8px; }
+.quiz-topbar .retake-btn:hover { background: #d32f2f; }
 
 .quiz-progress { background: white; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0; padding: 15px 20px; }
 .quiz-progress .timer-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 0.85rem; font-weight: 600; color: #333; }
@@ -138,7 +141,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   <div class="quiz-view" id="quizView">
     <div class="quiz-topbar">
       <h2 id="quizTitle">Exam 1</h2>
-      <button class="back-btn" id="backToExams">&#8592; All Exams</button>
+      <div>
+        <button class="retake-btn" id="retakeBtn">Retake Exam</button>
+        <button class="back-btn" id="backToExams">&#8592; All Exams</button>
+      </div>
     </div>
     <div class="quiz-progress">
       <div class="timer-bar">
@@ -217,6 +223,7 @@ const DATA = [[["What are two responsibilities that you will have as a British c
   const prevBtn = document.getElementById('prevBtn');
   const nextBtn = document.getElementById('nextBtn');
   const checkBtn = document.getElementById('checkBtn');
+  const retakeBtn = document.getElementById('retakeBtn');
   const resultsBar = document.getElementById('resultsBar');
 
   // Build exam selection grid
@@ -253,6 +260,29 @@ const DATA = [[["What are two responsibilities that you will have as a British c
   });
 
   checkBtn.addEventListener('click', () => checkCurrentAnswer());
+  retakeBtn.addEventListener('click', () => {
+    if(confirm('Are you sure you want to retake this exam? All progress for this exam will be lost.')) {
+      resetExam(currentExam);
+      startExam(currentExam);
+    }
+  });
+
+  function resetExam(ei) {
+    const exam = DATA[ei];
+    examState[ei] = {
+      answered: new Array(exam.length).fill(false),
+      selections: exam.map(() => []),
+      results: new Array(exam.length).fill(null) 
+    };
+    saveToLocalStorage();
+    
+    // Update the score display in the main grid
+    const scoreEl = document.getElementById('exam-score-' + ei);
+    if (scoreEl) {
+        scoreEl.textContent = '';
+        scoreEl.className = 'score-display';
+    }
+  }
 
   function startExam(ei) {
     currentExam = ei;
@@ -458,6 +488,7 @@ const DATA = [[["What are two responsibilities that you will have as a British c
     if (currentExam < DATA.length - 1) {
       buttonsHtml += '<button class="review-btn" style="background:#388e3c;' + (wrongCount > 0 ? 'margin-left:8px;' : '') + '" onclick="startNextExam()">Next Exam \u2192</button>';
     }
+    buttonsHtml += '<button class="review-btn" style="background:#f44336; margin-left:8px;" onclick="retakeCurrentExam()">Retake Exam</button>';
     resultsBar.innerHTML =
       '<div class="score-big ' + (passed ? 'pass' : 'fail') + '">' + correct + ' / ' + total + '</div>' +
       '<div class="result-text">' + (passed ? '\u2705 PASSED!' : '\u274c FAILED') + ' (' + needed + ' needed to pass)</div>' +
@@ -489,6 +520,13 @@ const DATA = [[["What are two responsibilities that you will have as a British c
   window.startNextExam = function() {
     if (currentExam < DATA.length - 1) {
       startExam(currentExam + 1);
+    }
+  };
+
+  window.retakeCurrentExam = function() {
+    if(confirm('Are you sure you want to retake this exam? All progress for this exam will be lost.')) {
+      resetExam(currentExam);
+      startExam(currentExam);
     }
   };
 
